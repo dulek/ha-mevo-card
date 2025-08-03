@@ -13,21 +13,26 @@ class MevoCard extends HTMLElement {
     set hass(hass) {
         const entityId = this.config.station;
         const state = hass.states[entityId];
-        const stateStr = state ? state.state : 'unavailable';
+        //const stateStr = state ? state.state : 'unavailable';
 
         // done once
         if (!this.content) {
             // user makes sense here as every login gets it's own instance
             this.innerHTML = `
-                <ha-card header="Mevo station">
-                    <div class="card-content"></div>
+                <ha-card>
+                    <div class="card-content">
+                    </div>
                 </ha-card>
             `;
             this.content = this.querySelector('div');
         }
         // done repeatedly
         this.content.innerHTML = `
-            <p>The ${entityId} is ${stateStr}.</p>
+            <p>
+                ${state.attributes.friendly_name}:
+                <ha-icon icon="mdi:bicycle"></ha-icon> ${state.attributes.bikes_available}
+                <ha-icon icon="mdi:bicycle-electric"></ha-icon> ${state.attributes.ebikes_available}
+            </p>
         `;
     }
 
@@ -42,5 +47,5 @@ window.customCards = window.customCards || [];
 window.customCards.push({
     type: "mevo-card",
     name: "Mevo Card",
-    description: "Card working with Mevo Tricity bikes integreation" // optional
+    description: "Card working with Mevo Tricity bikes integration" // optional
 });
