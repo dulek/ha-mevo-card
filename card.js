@@ -16,57 +16,43 @@ class MevoCard extends HTMLElement {
             this.innerHTML = `
                 <ha-card>
                     <style>
+                        .card-content {
+                            padding: 5px;
+                        }
                         .chip-container {
                             display: flex;
                             flex-direction: row;
-                            align-items: flex-start;
-                            justify-content: flex-start;
                             flex-wrap: wrap;
-                            margin-bottom: calc(-1 * var(--chip-spacing));
+                            justify-content: space-evenly;
+                            gap: 30px;
                         }
-                        .chip-container.align-end {
-                            justify-content: flex-end;
+                        .mevo-badge {
                         }
-                        .chip-container.align-center {
-                            justify-content: center;
-                        }
-                        .chip-container.align-justify {
-                            justify-content: space-between;
-                        }
-                        /*.chip-container * {
-                            margin-bottom: var(--chip-spacing);
-                        }
-                        .chip-container *:not(:last-child) {
-                            margin-right: var(--chip-spacing);
-                        }
-                        .chip-container[rtl] *:not(:last-child) {
-                            margin-right: initial;
-                            margin-left: var(--chip-spacing);
-                        }*/
                         .mevo-badge-title {
-                            font-size: 0.95em;
+                            font-size: 1.1em;
                             font-weight: 500;
                             margin-bottom: 4px;
                             text-align: center;
                         }
                         .mevo-badge-icons {
                             display: flex;
-                            gap: 8px;
+                            gap: 20px;
                             align-items: center;
                         }
                         .mevo-badge-icon {
                             align-items: center;
-                            gap: 2px;
+                            gap: 5px;
                             font-size: 1.1em;
-                            padding-right: 10px;
+                            display: flex;
+                            line-height: 100%;
                         }
                         .mevo-badge-unavail {
                             color: var(--error-color, #b71c1c);
-                            font-size: 0.9em;
+                            font-size: 1.1em;
                         }
                     </style>
                     <div class="card-content">
-                        <div class="chip-container align-justify"></div>
+                        <div class="chip-container"></div>
                     </div>
                 </ha-card>
             `;
@@ -76,19 +62,19 @@ class MevoCard extends HTMLElement {
         this.content.innerHTML = stations.map(station => {
             const state = hass.states[station.entity];
             if (!state) {
-                return `<div class="ha-badge"><div class="mevo-badge-title">${entityId}</div><div class="mevo-badge-unavail">Unavailable</div></div>`;
+                return `<div class="ha-badge"><div class="mevo-badge-title">${station}</div><div class="mevo-badge-unavail">Unavailable</div></div>`;
             }
             const name = station.name || state.attributes.friendly_name || entityId;
             const bikes = state.attributes.bikes_available ?? '?';
             const ebikes = state.attributes.ebikes_available ?? '?';
             return `
-                <ha-badge>
+                <div class="mevo-badge" style="margin: 5px;">
                     <div class="mevo-badge-title">${name}</div>
                     <div class="mevo-badge-icons">
-                        <span class="mevo-badge-icon"><ha-state-icon icon="mdi:bicycle"></ha-state-icon> ${bikes}</span>
-                        <span class="mevo-badge-icon"><ha-state-icon icon="mdi:bicycle-electric"></ha-state-icon> ${ebikes}</span>
+                        <span class="mevo-badge-icon ${(bikes === 0) ? 'mevo-badge-unavail': ''}"><ha-state-icon icon="mdi:bicycle"></ha-state-icon> ${bikes}</span>
+                        <span class="mevo-badge-icon ${(ebikes === 0) ? 'mevo-badge-unavail': ''}"><ha-state-icon icon="mdi:bicycle-electric"></ha-state-icon> ${ebikes}</span>
                     </div>
-                </ha-badge>
+                </div>
             `;
         }).join('');
     }
