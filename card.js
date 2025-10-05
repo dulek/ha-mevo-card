@@ -16,21 +16,32 @@ class MevoCard extends HTMLElement {
             this.innerHTML = `
                 <ha-card>
                     <style>
-                        .mevo-badges {
+                        .chip-container {
                             display: flex;
+                            flex-direction: row;
+                            align-items: flex-start;
+                            justify-content: flex-start;
                             flex-wrap: wrap;
-                            gap: 8px;
-                            margin: 8px 0;
+                            margin-bottom: calc(-1 * var(--chip-spacing));
                         }
-                        .mevo-badge {
-                            display: flex;
-                            flex-direction: column;
-                            align-items: center;
-                            background: var(--ha-card-background, #fff);
-                            border-radius: 12px;
-                            box-shadow: var(--ha-card-box-shadow, 0 2px 4px rgba(0,0,0,0.1));
-                            padding: 8px 12px;
-                            min-width: 90px;
+                        .chip-container.align-end {
+                            justify-content: flex-end;
+                        }
+                        .chip-container.align-center {
+                            justify-content: center;
+                        }
+                        .chip-container.align-justify {
+                            justify-content: space-between;
+                        }
+                        .chip-container * {
+                            margin-bottom: var(--chip-spacing);
+                        }
+                        .chip-container *:not(:last-child) {
+                            margin-right: var(--chip-spacing);
+                        }
+                        .chip-container[rtl] *:not(:last-child) {
+                            margin-right: initial;
+                            margin-left: var(--chip-spacing);
                         }
                         .mevo-badge-title {
                             font-size: 0.95em;
@@ -44,10 +55,10 @@ class MevoCard extends HTMLElement {
                             align-items: center;
                         }
                         .mevo-badge-icon {
-                            display: flex;
                             align-items: center;
                             gap: 2px;
                             font-size: 1.1em;
+                            padding-right: 10px;
                         }
                         .mevo-badge-unavail {
                             color: var(--error-color, #b71c1c);
@@ -55,35 +66,42 @@ class MevoCard extends HTMLElement {
                         }
                     </style>
                     <div class="card-content">
-                        <div class="mevo-badges"></div>
+                        <div class="chip-container align-justify"></div>
                     </div>
                 </ha-card>
             `;
-            this.content = this.querySelector('.mevo-badges');
+            this.content = this.querySelector('.chip-container');
         }
         // done repeatedly
-        this.content.innerHTML = stations.map(entityId => {
-            const state = hass.states[entityId];
+        this.content.innerHTML = stations.map(station => {
+            const state = hass.states[station.entity];
             if (!state) {
-                return `<div class="mevo-badge"><div class="mevo-badge-title">${entityId}</div><div class="mevo-badge-unavail">Unavailable</div></div>`;
+                return `<div class="ha-badge"><div class="mevo-badge-title">${entityId}</div><div class="mevo-badge-unavail">Unavailable</div></div>`;
             }
-            const name = state.attributes.friendly_name || entityId;
+            const name = station.name || state.attributes.friendly_name || entityId;
             const bikes = state.attributes.bikes_available ?? '?';
             const ebikes = state.attributes.ebikes_available ?? '?';
             return `
-                <div class="mevo-badge">
+                <ha-badge .type="badge" style="--tile-color:rgba(var(--rgb-blue-grey));--icon-color:rgba(var(--rgb-blue-grey));--badge-color:rgba(var(--rgb-blue-grey));--secondary-text-color:var(--primary-text-color);--primary-text-color:var(--primary-text-color);" class=" another ">
                     <div class="mevo-badge-title">${name}</div>
                     <div class="mevo-badge-icons">
-                        <span class="mevo-badge-icon"><ha-icon icon="mdi:bicycle"></ha-icon> ${bikes}</span>
-                        <span class="mevo-badge-icon"><ha-icon icon="mdi:bicycle-electric"></ha-icon> ${ebikes}</span>
+                        <span class="mevo-badge-icon"><ha-state-icon icon="mdi:bicycle"></ha-state-icon> ${bikes}</span>
+                        <span class="mevo-badge-icon"><ha-state-icon icon="mdi:bicycle-electric"></ha-state-icon> ${ebikes}</span>
                     </div>
-                </div>
+                </ha-badge>
             `;
         }).join('');
     }
 
     static getStubConfig() {
-        return { stations: ["sensor.mevo_station_1", "sensor.mevo_station_2"] };
+        return {
+            stations: [
+                {
+                    entity: "sensor.mevo_station_12345",
+                    name: "Foobar"
+                },
+            ]
+        };
     }
 }
 
