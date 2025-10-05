@@ -33,7 +33,7 @@ class MevoCard extends HTMLElement {
                         .chip-container.align-justify {
                             justify-content: space-between;
                         }
-                        .chip-container * {
+                        /*.chip-container * {
                             margin-bottom: var(--chip-spacing);
                         }
                         .chip-container *:not(:last-child) {
@@ -42,7 +42,7 @@ class MevoCard extends HTMLElement {
                         .chip-container[rtl] *:not(:last-child) {
                             margin-right: initial;
                             margin-left: var(--chip-spacing);
-                        }
+                        }*/
                         .mevo-badge-title {
                             font-size: 0.95em;
                             font-weight: 500;
@@ -82,7 +82,7 @@ class MevoCard extends HTMLElement {
             const bikes = state.attributes.bikes_available ?? '?';
             const ebikes = state.attributes.ebikes_available ?? '?';
             return `
-                <ha-badge .type="badge" style="--tile-color:rgba(var(--rgb-blue-grey));--icon-color:rgba(var(--rgb-blue-grey));--badge-color:rgba(var(--rgb-blue-grey));--secondary-text-color:var(--primary-text-color);--primary-text-color:var(--primary-text-color);" class=" another ">
+                <ha-badge>
                     <div class="mevo-badge-title">${name}</div>
                     <div class="mevo-badge-icons">
                         <span class="mevo-badge-icon"><ha-state-icon icon="mdi:bicycle"></ha-state-icon> ${bikes}</span>
