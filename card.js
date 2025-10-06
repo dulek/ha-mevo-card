@@ -9,12 +9,27 @@ class MevoCard extends HTMLElement {
         this.config = config;
     }
 
+    static getStubConfig() {
+        return {
+            stations: [
+                {
+                    entity: "sensor.stacja_12345",
+                    name: "Foobar"
+                },
+            ],
+            title: "Mevo Stations"
+        };
+    }
+
     set hass(hass) {
         const stations = this.config.stations;
         // done once
         if (!this.content) {
             this.innerHTML = `
-                <ha-card>
+                <ha-card">
+                    <div class="card-content">
+                        <div class="chip-container"></div>
+                    </div>
                     <style>
                         .card-content {
                             padding: 5px;
@@ -27,6 +42,7 @@ class MevoCard extends HTMLElement {
                             gap: 30px;
                         }
                         .mevo-badge {
+                            margin: 5px;
                         }
                         .mevo-badge-title {
                             font-size: 1.1em;
@@ -48,12 +64,8 @@ class MevoCard extends HTMLElement {
                         }
                         .mevo-badge-unavail {
                             color: var(--error-color, #b71c1c);
-                            font-size: 1.1em;
                         }
                     </style>
-                    <div class="card-content">
-                        <div class="chip-container"></div>
-                    </div>
                 </ha-card>
             `;
             this.content = this.querySelector('.chip-container');
@@ -62,13 +74,13 @@ class MevoCard extends HTMLElement {
         this.content.innerHTML = stations.map(station => {
             const state = hass.states[station.entity];
             if (!state) {
-                return `<div class="ha-badge"><div class="mevo-badge-title">${station}</div><div class="mevo-badge-unavail">Unavailable</div></div>`;
+                return `<div class="mevo-badge"><div class="mevo-badge-title">${station}</div><div class="mevo-badge-unavail">Unavailable</div></div>`;
             }
             const name = station.name || state.attributes.friendly_name || entityId;
             const bikes = state.attributes.bikes_available ?? '?';
             const ebikes = state.attributes.ebikes_available ?? '?';
             return `
-                <div class="mevo-badge" style="margin: 5px;">
+                <div class="mevo-badge">
                     <div class="mevo-badge-title">${name}</div>
                     <div class="mevo-badge-icons">
                         <span class="mevo-badge-icon ${(bikes === 0) ? 'mevo-badge-unavail': ''}"><ha-state-icon icon="mdi:bicycle"></ha-state-icon> ${bikes}</span>
@@ -77,17 +89,6 @@ class MevoCard extends HTMLElement {
                 </div>
             `;
         }).join('');
-    }
-
-    static getStubConfig() {
-        return {
-            stations: [
-                {
-                    entity: "sensor.mevo_station_12345",
-                    name: "Foobar"
-                },
-            ]
-        };
     }
 }
 
