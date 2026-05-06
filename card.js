@@ -59,7 +59,8 @@ class MevoCard extends LitElement {
     static getStubConfig() {
         return {
             stations: [
-                { entity: "sensor.stacja_12345", name: "Foobar" },
+                { entity: "sensor.station_gda001" },
+                { entity: "sensor.station_gda002" },
             ],
             title: "Mevo Stations",
         };
