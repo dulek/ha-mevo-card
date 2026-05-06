@@ -99,7 +99,7 @@ class MevoCard extends LitElement {
     render() {
         if (!this._config || !this.hass) return nothing;
         return html`
-            <ha-card>
+            <ha-card .header=${this._config.title || nothing}>
                 <div class="chip-container">
                     ${this._config.stations.map(
                         (station) => this._renderStation(station))}
