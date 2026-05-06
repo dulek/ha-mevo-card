@@ -217,25 +217,33 @@ class MevoCardEditor extends LitElement {
     }
 
     static styles = css`
-        .row {
-            display: flex;
-            align-items: flex-end;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-        .row ha-entity-picker {
-            flex: 2;
-        }
-        .row ha-textfield {
-            flex: 1;
-        }
         ha-textfield {
             display: block;
+            width: 100%;
+        }
+        .title-field {
             margin-bottom: 12px;
         }
         .stations-header {
             font-weight: 500;
             margin: 12px 0 8px;
+        }
+        .station {
+            border: 1px solid var(--divider-color, #e0e0e0);
+            border-radius: 6px;
+            padding: 8px 12px 12px;
+            margin-bottom: 8px;
+            position: relative;
+        }
+        .station ha-entity-picker {
+            display: block;
+            width: 100%;
+            margin-bottom: 8px;
+        }
+        .station-remove {
+            position: absolute;
+            top: 4px;
+            right: 4px;
         }
         .add-row {
             display: flex;
@@ -255,15 +263,22 @@ class MevoCardEditor extends LitElement {
         const stations = this._config.stations || [];
         return html`
             <ha-textfield
+                class="title-field"
                 label="Title (optional)"
                 .value=${this._config.title || ""}
                 @input=${this._titleChanged}
             ></ha-textfield>
             <div class="stations-header">Stations</div>
             ${stations.map((station, index) => html`
-                <div class="row">
+                <div class="station">
+                    <ha-icon-button
+                        class="station-remove"
+                        label="Remove"
+                        @click=${() => this._removeStation(index)}
+                    >
+                        <ha-icon icon="mdi:delete"></ha-icon>
+                    </ha-icon-button>
                     <ha-entity-picker
-                        label="Station"
                         .hass=${this.hass}
                         .value=${station.entity || ""}
                         .includeDomains=${["sensor"]}
@@ -278,12 +293,6 @@ class MevoCardEditor extends LitElement {
                         @input=${(e) =>
                             this._stationChanged(index, "name", e.target.value)}
                     ></ha-textfield>
-                    <ha-icon-button
-                        label="Remove"
-                        @click=${() => this._removeStation(index)}
-                    >
-                        <ha-icon icon="mdi:delete"></ha-icon>
-                    </ha-icon-button>
                 </div>
             `)}
             <div class="add-row">
