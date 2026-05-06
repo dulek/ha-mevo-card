@@ -197,53 +197,96 @@ class MevoCard extends LitElement {
     }
 }
 
-const buildEditorSchema = (entities) => {
-    const base = [
-        { name: "title", selector: { text: {} } },
-        {
-            name: "extra",
-            selector: {
-                select: {
-                    multiple: true,
-                    options: [
-                        { value: "docks", label: "Docks available" },
-                        { value: "capacity", label: "Capacity" },
-                    ],
-                },
+const BASE_SCHEMA = [
+    { name: "title", selector: { text: {} } },
+    {
+        name: "extra",
+        selector: {
+            select: {
+                multiple: true,
+                options: [
+                    { value: "docks", label: "Docks available" },
+                    { value: "capacity", label: "Capacity" },
+                ],
             },
         },
-        {
-            name: "stations",
-            required: true,
-            selector: {
-                entity: {
-                    multiple: true,
-                    filter: { integration: "mevo" },
-                },
-            },
-        },
-    ];
-    if (entities.length === 0) return base;
-    return [
-        ...base,
-        {
-            name: "names",
-            type: "expandable",
-            title: "Station name overrides",
-            schema: entities.map((entity) => ({
-                name: entity,
-                selector: { text: {} },
-            })),
-        },
-    ];
-};
+    },
+];
+
+const STATION_DETAIL_SCHEMA = [
+    { name: "name", selector: { text: {} } },
+];
+
+const ADD_STATION_SELECTOR = (excluded) => ({
+    entity: {
+        filter: { integration: "mevo" },
+        exclude_entities: excluded,
+    },
+});
+
+const MDI_DRAG = "M7,19V17H9V19H7M11,19V17H13V19H11M15,19V17H17V19H15M7,15V13H9V15H7M11,15V13H13V15H11M15,15V13H17V15H15M7,11V9H9V11H7M11,11V9H13V11H11M15,11V9H17V11H15M7,7V5H9V7H7M11,7V5H13V7H11M15,7V5H17V7H15Z";
+const MDI_PENCIL = "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z";
+const MDI_DELETE = "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z";
+const MDI_ARROW_LEFT = "M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z";
 
 
 class MevoCardEditor extends LitElement {
     static properties = {
         hass: { attribute: false },
         _config: { state: true },
+        _editIndex: { state: true },
     };
+
+    static styles = css`
+        .stations-header {
+            display: block;
+            font-weight: 500;
+            margin: 16px 0 8px;
+        }
+        .row {
+            display: flex;
+            align-items: center;
+            padding: 4px 0;
+        }
+        .row + .row {
+            border-top: 1px solid var(--divider-color);
+        }
+        .handle {
+            cursor: move;
+            padding-right: 8px;
+            color: var(--secondary-text-color);
+        }
+        .info {
+            flex: 1;
+            min-width: 0;
+            margin: 0 8px;
+            overflow: hidden;
+        }
+        .info .primary {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .info .secondary {
+            font-size: 0.85em;
+            color: var(--secondary-text-color);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .add {
+            margin-top: 8px;
+        }
+        .sub-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .sub-header .title {
+            font-weight: 500;
+            margin-left: 4px;
+        }
+    `;
 
     setConfig(config) {
         this._config = config;
@@ -251,61 +294,132 @@ class MevoCardEditor extends LitElement {
 
     render() {
         if (!this.hass || !this._config) return nothing;
-        const entities = (this._config.stations || []).map((s) =>
-            typeof s === "string" ? s : s.entity);
+        if (this._editIndex !== undefined) return this._renderSubEditor();
+        return this._renderMain();
+    }
+
+    _renderMain() {
+        const stations = this._stations();
         return html`
             <ha-form
                 .hass=${this.hass}
-                .data=${this._asFormData()}
-                .schema=${buildEditorSchema(entities)}
-                .computeLabel=${this._computeLabel.bind(this)}
-                @value-changed=${this._valueChanged}
+                .data=${{
+                    title: this._config.title || "",
+                    extra: this._asExtraArray(),
+                }}
+                .schema=${BASE_SCHEMA}
+                .computeLabel=${MevoCardEditor._computeLabel}
+                @value-changed=${this._baseChanged}
+            ></ha-form>
+            <span class="stations-header">Stations</span>
+            <ha-sortable
+                handle-selector=".handle"
+                @item-moved=${this._stationMoved}
+            >
+                <div>
+                    ${stations.map((station, idx) =>
+                        this._renderRow(station, idx))}
+                </div>
+            </ha-sortable>
+            <ha-entity-picker
+                class="add"
+                .hass=${this.hass}
+                .label=${"Add station"}
+                .value=${""}
+                .entityFilter=${this._addFilter()}
+                @value-changed=${this._addStation}
+            ></ha-entity-picker>
+        `;
+    }
+
+    _renderRow(station, idx) {
+        const state = this.hass.states[station.entity];
+        const primary = station.name
+            || state?.attributes?.friendly_name
+            || station.entity;
+        const secondary = station.name
+            ? `${state?.attributes?.friendly_name || station.entity}`
+            : station.entity;
+        return html`
+            <div class="row">
+                <ha-svg-icon class="handle" .path=${MDI_DRAG}></ha-svg-icon>
+                <div class="info">
+                    <div class="primary">${primary}</div>
+                    <div class="secondary">${secondary}</div>
+                </div>
+                <ha-icon-button
+                    .label=${"Edit"}
+                    .path=${MDI_PENCIL}
+                    @click=${() => this._editStation(idx)}
+                ></ha-icon-button>
+                <ha-icon-button
+                    .label=${"Remove"}
+                    .path=${MDI_DELETE}
+                    @click=${() => this._removeStation(idx)}
+                ></ha-icon-button>
+            </div>
+        `;
+    }
+
+    _renderSubEditor() {
+        const stations = this._stations();
+        const station = stations[this._editIndex];
+        if (!station) {
+            this._editIndex = undefined;
+            return nothing;
+        }
+        const state = this.hass.states[station.entity];
+        const fallback = state?.attributes?.friendly_name || station.entity;
+        return html`
+            <div class="sub-header">
+                <ha-icon-button
+                    .label=${"Back"}
+                    .path=${MDI_ARROW_LEFT}
+                    @click=${this._exitSubEditor}
+                ></ha-icon-button>
+                <span class="title">${fallback}</span>
+            </div>
+            <ha-form
+                .hass=${this.hass}
+                .data=${{ name: station.name || "" }}
+                .schema=${STATION_DETAIL_SCHEMA}
+                .computeLabel=${() => "Custom name"}
+                @value-changed=${this._stationDetailChanged}
             ></ha-form>
         `;
     }
 
-    _asFormData() {
-        const stations = this._config.stations || [];
+    _stations() {
+        return (this._config.stations || []).map((s) =>
+            typeof s === "string" ? { entity: s } : s);
+    }
+
+    _asExtraArray() {
         let extra = this._config.extra ?? [];
         if (typeof extra === "string") extra = [extra];
-        const names = {};
-        stations.forEach((s) => {
-            if (typeof s === "object" && s.entity && s.name) {
-                names[s.entity] = s.name;
-            }
-        });
-        return {
-            title: this._config.title || "",
-            extra,
-            stations: stations.map((s) =>
-                typeof s === "string" ? s : s.entity),
-            names,
+        return extra;
+    }
+
+    _addFilter() {
+        const used = new Set(this._stations().map((s) => s.entity));
+        return (stateObj) => {
+            if (used.has(stateObj.entity_id)) return false;
+            const reg = this.hass.entities?.[stateObj.entity_id];
+            return reg?.platform === "mevo";
         };
     }
 
-    _computeLabel(schema) {
+    static _computeLabel(schema) {
         switch (schema.name) {
             case "title": return "Title";
             case "extra": return "Extra indicators";
-            case "stations": return "Stations";
-            case "names": return "Station name overrides";
-            default: {
-                const state = this.hass.states[schema.name];
-                return state?.attributes?.friendly_name || schema.name;
-            }
+            default: return schema.name;
         }
     }
 
-    _valueChanged(e) {
+    _baseChanged(e) {
         const formData = e.detail.value;
-        const entities = formData.stations || [];
-        const names = formData.names || {};
-        const newStations = entities.map((entity) => {
-            const name = names[entity];
-            return name ? { entity, name } : { entity };
-        });
-
-        const newConfig = { ...this._config, stations: newStations };
+        const newConfig = { ...this._config };
         if (formData.title) newConfig.title = formData.title;
         else delete newConfig.title;
         if (formData.extra && formData.extra.length > 0) {
@@ -313,7 +427,51 @@ class MevoCardEditor extends LitElement {
         } else {
             delete newConfig.extra;
         }
+        this._fireChange(newConfig);
+    }
 
+    _stationMoved(e) {
+        const { oldIndex, newIndex } = e.detail;
+        const stations = this._stations();
+        const [moved] = stations.splice(oldIndex, 1);
+        stations.splice(newIndex, 0, moved);
+        this._fireChange({ ...this._config, stations });
+    }
+
+    _addStation(e) {
+        e.stopPropagation();
+        const entity = e.detail.value;
+        if (!entity) return;
+        const stations = [...this._stations(), { entity }];
+        e.target.value = "";
+        this._fireChange({ ...this._config, stations });
+    }
+
+    _removeStation(idx) {
+        const stations = this._stations();
+        stations.splice(idx, 1);
+        this._fireChange({ ...this._config, stations });
+    }
+
+    _editStation(idx) {
+        this._editIndex = idx;
+    }
+
+    _exitSubEditor() {
+        this._editIndex = undefined;
+    }
+
+    _stationDetailChanged(e) {
+        const formData = e.detail.value;
+        const stations = this._stations();
+        const station = { ...stations[this._editIndex] };
+        if (formData.name) station.name = formData.name;
+        else delete station.name;
+        stations[this._editIndex] = station;
+        this._fireChange({ ...this._config, stations });
+    }
+
+    _fireChange(newConfig) {
         this._config = newConfig;
         this.dispatchEvent(new CustomEvent("config-changed", {
             detail: { config: newConfig },
