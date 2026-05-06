@@ -237,8 +237,25 @@ class MevoCardEditor extends LitElement {
             font-weight: 500;
             margin: 12px 0 8px;
         }
-        mwc-button {
+        .add-button {
             margin-top: 8px;
+            background: transparent;
+            border: 1px solid var(--primary-color, #03a9f4);
+            color: var(--primary-color, #03a9f4);
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font: inherit;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.0892857143em;
+            font-size: 0.875rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .add-button:hover {
+            background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.08);
         }
     `;
 
@@ -281,10 +298,14 @@ class MevoCardEditor extends LitElement {
                     </ha-icon-button>
                 </div>
             `)}
-            <mwc-button outlined @click=${this._addStation}>
-                <ha-icon slot="icon" icon="mdi:plus"></ha-icon>
+            <button
+                class="add-button"
+                type="button"
+                @click=${this._addStation}
+            >
+                <ha-icon icon="mdi:plus"></ha-icon>
                 Add station
-            </mwc-button>
+            </button>
         `;
     }
 
