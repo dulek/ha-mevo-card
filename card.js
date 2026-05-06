@@ -281,7 +281,10 @@ class MevoCardEditor extends LitElement {
                     </ha-icon-button>
                 </div>
             `)}
-            <mwc-button @click=${this._addStation}>Add station</mwc-button>
+            <mwc-button outlined @click=${this._addStation}>
+                <ha-icon slot="icon" icon="mdi:plus"></ha-icon>
+                Add station
+            </mwc-button>
         `;
     }
 
