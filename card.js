@@ -17,18 +17,12 @@ class MevoCard extends LitElement {
     };
 
     static styles = css`
-        ha-card {
-            padding: 5px;
-        }
         .chip-container {
             display: flex;
-            flex-direction: row;
             flex-wrap: wrap;
             justify-content: space-evenly;
             gap: 30px;
-        }
-        .mevo-badge {
-            margin: 5px;
+            padding: 16px;
         }
         .mevo-badge-title {
             font-size: 1.1em;
