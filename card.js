@@ -273,9 +273,11 @@ class MevoCardEditor extends LitElement {
             return { entity };
         });
 
-        const newConfig = { stations: newStations };
+        const newConfig = { ...this._config, stations: newStations };
         if (formData.title) newConfig.title = formData.title;
+        else delete newConfig.title;
         if (formData.extra) newConfig.extra = formData.extra;
+        else delete newConfig.extra;
 
         this._config = newConfig;
         this.dispatchEvent(new CustomEvent("config-changed", {
