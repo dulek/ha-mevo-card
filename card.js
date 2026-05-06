@@ -235,6 +235,7 @@ class MevoCardEditor extends LitElement {
         hass: { attribute: false },
         _config: { state: true },
         _editIndex: { state: true },
+        _pickerReady: { state: true },
     };
 
     static styles = css`
@@ -292,6 +293,29 @@ class MevoCardEditor extends LitElement {
         this._config = config;
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        this._loadPicker();
+    }
+
+    async _loadPicker() {
+        if (customElements.get("ha-entity-picker")) {
+            this._pickerReady = true;
+            return;
+        }
+        if (window.loadCardHelpers) {
+            const helpers = await window.loadCardHelpers();
+            const card = await helpers.createCardElement({
+                type: "entities",
+                entities: [],
+            });
+            try {
+                await card.constructor.getConfigElement?.();
+            } catch (e) { /* ignore */ }
+        }
+        this._pickerReady = customElements.get("ha-entity-picker") !== undefined;
+    }
+
     render() {
         if (!this.hass || !this._config) return nothing;
         if (this._editIndex !== undefined) return this._renderSubEditor();
@@ -321,14 +345,16 @@ class MevoCardEditor extends LitElement {
                         this._renderRow(station, idx))}
                 </div>
             </ha-sortable>
-            <ha-entity-picker
-                class="add"
-                .hass=${this.hass}
-                .label=${"Add station"}
-                .value=${""}
-                .entityFilter=${this._addFilter()}
-                @value-changed=${this._addStation}
-            ></ha-entity-picker>
+            ${this._pickerReady ? html`
+                <ha-entity-picker
+                    class="add"
+                    .hass=${this.hass}
+                    .label=${"Add station"}
+                    .value=${""}
+                    .entityFilter=${this._addFilter()}
+                    @value-changed=${this._addStation}
+                ></ha-entity-picker>
+            ` : nothing}
         `;
     }
 
