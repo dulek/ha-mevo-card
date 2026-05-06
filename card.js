@@ -2,6 +2,14 @@ import {
     LitElement, html, css, nothing,
 } from "https://unpkg.com/lit@3.1.0/index.js?module";
 
+const VERSION = "0.1.0";
+
+console.info(
+    `%c MEVO-CARD %c v${VERSION} `,
+    "color: white; background: #00b8d4; font-weight: 700;",
+    "color: #00b8d4; background: white; font-weight: 700;",
+);
+
 class MevoCard extends LitElement {
     static properties = {
         hass: { attribute: false },
@@ -60,6 +68,20 @@ class MevoCard extends LitElement {
                 { entity: "sensor.stacja_12345", name: "Foobar" },
             ],
             title: "Mevo Stations",
+        };
+    }
+
+    getCardSize() {
+        if (!this._config) return 1;
+        return 1 + Math.ceil(this._config.stations.length / 4);
+    }
+
+    getLayoutOptions() {
+        return {
+            grid_columns: 4,
+            grid_rows: "auto",
+            grid_min_columns: 2,
+            grid_min_rows: 1,
         };
     }
 
