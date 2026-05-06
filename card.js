@@ -145,6 +145,7 @@ class MevoCard extends LitElement {
                     <ha-state-icon icon="mdi:bicycle-electric"></ha-state-icon>
                     ${ebikes}
                 </span>
+                ${this._renderExtra(state)}
             </div>
         `;
 
@@ -156,6 +157,27 @@ class MevoCard extends LitElement {
             `;
         }
         return html`<div class="mevo-badge">${body}</div>`;
+    }
+
+    _renderExtra(state) {
+        const extra = this._config.extra;
+        if (extra === "docks") {
+            return html`
+                <span class="mevo-badge-icon">
+                    <ha-state-icon icon="mdi:parking"></ha-state-icon>
+                    ${state.attributes.docks_available ?? "?"}
+                </span>
+            `;
+        }
+        if (extra === "capacity") {
+            return html`
+                <span class="mevo-badge-icon">
+                    <ha-state-icon icon="mdi:counter"></ha-state-icon>
+                    ${state.attributes.capacity ?? "?"}
+                </span>
+            `;
+        }
+        return nothing;
     }
 }
 

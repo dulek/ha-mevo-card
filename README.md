@@ -41,6 +41,7 @@ stations:
 | ---------- | ------ | ------- | ------------------------------------------------------- |
 | `title`    | string | _none_  | Header rendered at the top of the card.                 |
 | `stations` | list   | _req._  | Stations to display.                                    |
+| `extra`    | string | _none_  | Extra indicator per badge: `docks` or `capacity`.       |
 
 Each entry under `stations` accepts:
 
