@@ -45,6 +45,9 @@ class MevoCard extends LitElement {
         .mevo-badge-unavail {
             color: var(--error-color, #b71c1c);
         }
+        .mevo-badge-low {
+            color: var(--warning-color, #ff9800);
+        }
         .mevo-badge-link {
             color: inherit;
             text-decoration: none;
@@ -135,13 +138,11 @@ class MevoCard extends LitElement {
         const body = html`
             <div class="mevo-badge-title">${name}</div>
             <div class="mevo-badge-icons">
-                <span class="mevo-badge-icon ${
-                    bikes === 0 ? "mevo-badge-unavail" : ""}">
+                <span class="mevo-badge-icon ${MevoCard._tierClass(bikes)}">
                     <ha-state-icon icon="mdi:bicycle"></ha-state-icon>
                     ${bikes}
                 </span>
-                <span class="mevo-badge-icon ${
-                    ebikes === 0 ? "mevo-badge-unavail" : ""}">
+                <span class="mevo-badge-icon ${MevoCard._tierClass(ebikes)}">
                     <ha-state-icon icon="mdi:bicycle-electric"></ha-state-icon>
                     ${ebikes}
                 </span>
@@ -157,6 +158,12 @@ class MevoCard extends LitElement {
             `;
         }
         return html`<div class="mevo-badge">${body}</div>`;
+    }
+
+    static _tierClass(count) {
+        if (count === 0) return "mevo-badge-unavail";
+        if (typeof count === "number" && count <= 2) return "mevo-badge-low";
+        return "";
     }
 
     _renderExtra(state) {
