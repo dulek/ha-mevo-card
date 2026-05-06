@@ -61,8 +61,11 @@ class MevoCard extends LitElement {
             || config.stations.length === 0) {
             throw new Error("Please define a list of stations!");
         }
+        let extra = config.extra ?? [];
+        if (typeof extra === "string") extra = [extra];
         this._config = {
             ...config,
+            extra,
             stations: config.stations.map((s) =>
                 typeof s === "string" ? { entity: s } : s),
         };
@@ -171,24 +174,26 @@ class MevoCard extends LitElement {
     }
 
     _renderExtra(state) {
-        const extra = this._config.extra;
-        if (extra === "docks") {
-            return html`
-                <span class="mevo-badge-icon">
-                    <ha-state-icon icon="mdi:parking"></ha-state-icon>
-                    ${state.attributes.docks_available ?? "?"}
-                </span>
-            `;
-        }
-        if (extra === "capacity") {
-            return html`
-                <span class="mevo-badge-icon">
-                    <ha-state-icon icon="mdi:counter"></ha-state-icon>
-                    ${state.attributes.capacity ?? "?"}
-                </span>
-            `;
-        }
-        return nothing;
+        const extra = this._config.extra || [];
+        return extra.map((kind) => {
+            if (kind === "docks") {
+                return html`
+                    <span class="mevo-badge-icon">
+                        <ha-state-icon icon="mdi:parking"></ha-state-icon>
+                        ${state.attributes.docks_available ?? "?"}
+                    </span>
+                `;
+            }
+            if (kind === "capacity") {
+                return html`
+                    <span class="mevo-badge-icon">
+                        <ha-state-icon icon="mdi:counter"></ha-state-icon>
+                        ${state.attributes.capacity ?? "?"}
+                    </span>
+                `;
+            }
+            return nothing;
+        });
     }
 }
 
@@ -198,7 +203,7 @@ const EDITOR_SCHEMA = [
         name: "extra",
         selector: {
             select: {
-                mode: "dropdown",
+                multiple: true,
                 options: [
                     { value: "docks", label: "Docks available" },
                     { value: "capacity", label: "Capacity" },
@@ -244,9 +249,11 @@ class MevoCardEditor extends LitElement {
 
     _asFormData() {
         const stations = this._config.stations || [];
+        let extra = this._config.extra ?? [];
+        if (typeof extra === "string") extra = [extra];
         return {
             title: this._config.title || "",
-            extra: this._config.extra || "",
+            extra,
             stations: stations.map((s) =>
                 typeof s === "string" ? s : s.entity),
         };
@@ -255,7 +262,7 @@ class MevoCardEditor extends LitElement {
     static _computeLabel(schema) {
         switch (schema.name) {
             case "title": return "Title";
-            case "extra": return "Extra indicator";
+            case "extra": return "Extra indicators";
             case "stations": return "Stations";
             default: return schema.name;
         }
@@ -276,8 +283,11 @@ class MevoCardEditor extends LitElement {
         const newConfig = { ...this._config, stations: newStations };
         if (formData.title) newConfig.title = formData.title;
         else delete newConfig.title;
-        if (formData.extra) newConfig.extra = formData.extra;
-        else delete newConfig.extra;
+        if (formData.extra && formData.extra.length > 0) {
+            newConfig.extra = formData.extra;
+        } else {
+            delete newConfig.extra;
+        }
 
         this._config = newConfig;
         this.dispatchEvent(new CustomEvent("config-changed", {

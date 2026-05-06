@@ -41,7 +41,7 @@ stations:
 | ---------- | ------ | ------- | ------------------------------------------------------- |
 | `title`    | string | _none_  | Header rendered at the top of the card.                 |
 | `stations` | list   | _req._  | Stations to display.                                    |
-| `extra`    | string | _none_  | Extra indicator per badge: `docks` or `capacity`.       |
+| `extra`    | list   | _none_  | Extra indicators per badge: any of `docks`, `capacity`. |
 
 Each entry under `stations` is either an entity ID string, or an
 object with these fields:
