@@ -61,7 +61,11 @@ class MevoCard extends LitElement {
             || config.stations.length === 0) {
             throw new Error("Please define a list of stations!");
         }
-        this._config = config;
+        this._config = {
+            ...config,
+            stations: config.stations.map((s) =>
+                typeof s === "string" ? { entity: s } : s),
+        };
     }
 
     static getStubConfig() {
@@ -188,167 +192,97 @@ class MevoCard extends LitElement {
     }
 }
 
+const EDITOR_SCHEMA = [
+    { name: "title", selector: { text: {} } },
+    {
+        name: "extra",
+        selector: {
+            select: {
+                mode: "dropdown",
+                options: [
+                    { value: "docks", label: "Docks available" },
+                    { value: "capacity", label: "Capacity" },
+                ],
+            },
+        },
+    },
+    {
+        name: "stations",
+        required: true,
+        selector: {
+            entity: {
+                multiple: true,
+                filter: { integration: "mevo" },
+            },
+        },
+    },
+];
+
+
 class MevoCardEditor extends LitElement {
     static properties = {
         hass: { attribute: false },
         _config: { state: true },
-        _helpersLoaded: { state: true },
     };
-
-    constructor() {
-        super();
-        this._helpersLoaded = false;
-        this._loadHelpers();
-    }
-
-    async _loadHelpers() {
-        if (customElements.get("ha-entity-picker")) {
-            this._helpersLoaded = true;
-            return;
-        }
-        const helpers = await window.loadCardHelpers();
-        const probe = await helpers.createCardElement({
-            type: "entities", entities: [],
-        });
-        if (probe.constructor.getConfigElement) {
-            await probe.constructor.getConfigElement();
-        }
-        this._helpersLoaded = true;
-    }
-
-    static styles = css`
-        ha-textfield {
-            display: block;
-            width: 100%;
-        }
-        .title-field {
-            margin-bottom: 12px;
-        }
-        .stations-header {
-            font-weight: 500;
-            margin: 12px 0 8px;
-        }
-        .station {
-            border: 1px solid var(--divider-color, #e0e0e0);
-            border-radius: 6px;
-            padding: 8px 12px 12px;
-            margin-bottom: 8px;
-            position: relative;
-        }
-        .station ha-entity-picker {
-            display: block;
-            width: 100%;
-            margin-bottom: 8px;
-        }
-        .station-remove {
-            position: absolute;
-            top: 4px;
-            right: 4px;
-        }
-        .add-row {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            margin-top: 8px;
-            color: var(--primary-color);
-        }
-    `;
 
     setConfig(config) {
         this._config = config;
     }
 
     render() {
-        if (!this.hass || !this._config || !this._helpersLoaded) return nothing;
-        const stations = this._config.stations || [];
+        if (!this.hass || !this._config) return nothing;
         return html`
-            <ha-textfield
-                class="title-field"
-                label="Title (optional)"
-                .value=${this._config.title || ""}
-                @input=${this._titleChanged}
-            ></ha-textfield>
-            <div class="stations-header">Stations</div>
-            ${stations.map((station, index) => html`
-                <div class="station">
-                    <ha-icon-button
-                        class="station-remove"
-                        label="Remove"
-                        @click=${() => this._removeStation(index)}
-                    >
-                        <ha-icon icon="mdi:delete"></ha-icon>
-                    </ha-icon-button>
-                    <ha-entity-picker
-                        .hass=${this.hass}
-                        .value=${station.entity || ""}
-                        .includeDomains=${["sensor"]}
-                        .entityFilter=${MevoCardEditor._isMevoSensor}
-                        allow-custom-entity
-                        @value-changed=${(e) =>
-                            this._stationChanged(index, "entity", e.detail.value)}
-                    ></ha-entity-picker>
-                    <ha-textfield
-                        label="Name (optional)"
-                        .value=${station.name || ""}
-                        @input=${(e) =>
-                            this._stationChanged(index, "name", e.target.value)}
-                    ></ha-textfield>
-                </div>
-            `)}
-            <div class="add-row">
-                <ha-icon-button
-                    label="Add station"
-                    @click=${this._addStation}
-                >
-                    <ha-icon icon="mdi:plus"></ha-icon>
-                </ha-icon-button>
-            </div>
+            <ha-form
+                .hass=${this.hass}
+                .data=${this._asFormData()}
+                .schema=${EDITOR_SCHEMA}
+                .computeLabel=${MevoCardEditor._computeLabel}
+                @value-changed=${this._valueChanged}
+            ></ha-form>
         `;
     }
 
-    static _isMevoSensor(stateObj) {
-        return "bikes_available" in stateObj.attributes
-            || "ebikes_available" in stateObj.attributes;
+    _asFormData() {
+        const stations = this._config.stations || [];
+        return {
+            title: this._config.title || "",
+            extra: this._config.extra || "",
+            stations: stations.map((s) =>
+                typeof s === "string" ? s : s.entity),
+        };
     }
 
-    _emitConfig(newConfig) {
+    static _computeLabel(schema) {
+        switch (schema.name) {
+            case "title": return "Title";
+            case "extra": return "Extra indicator";
+            case "stations": return "Stations";
+            default: return schema.name;
+        }
+    }
+
+    _valueChanged(e) {
+        const formData = e.detail.value;
+        const oldStations = this._config.stations || [];
+        const newStations = (formData.stations || []).map((entity) => {
+            const existing = oldStations.find((s) =>
+                (typeof s === "string" ? s : s.entity) === entity);
+            if (existing && typeof existing === "object" && existing.name) {
+                return existing;
+            }
+            return { entity };
+        });
+
+        const newConfig = { stations: newStations };
+        if (formData.title) newConfig.title = formData.title;
+        if (formData.extra) newConfig.extra = formData.extra;
+
         this._config = newConfig;
         this.dispatchEvent(new CustomEvent("config-changed", {
             detail: { config: newConfig },
             bubbles: true,
             composed: true,
         }));
-    }
-
-    _titleChanged(e) {
-        const value = e.target.value;
-        const newConfig = { ...this._config };
-        if (value) newConfig.title = value;
-        else delete newConfig.title;
-        this._emitConfig(newConfig);
-    }
-
-    _stationChanged(index, key, value) {
-        const stations = [...(this._config.stations || [])];
-        const station = { ...stations[index] };
-        if (value) station[key] = value;
-        else delete station[key];
-        stations[index] = station;
-        this._emitConfig({ ...this._config, stations });
-    }
-
-    _addStation() {
-        const stations = [
-            ...(this._config.stations || []),
-            { entity: "" },
-        ];
-        this._emitConfig({ ...this._config, stations });
-    }
-
-    _removeStation(index) {
-        const stations = (this._config.stations || [])
-            .filter((_, i) => i !== index);
-        this._emitConfig({ ...this._config, stations });
     }
 }
 

@@ -30,7 +30,7 @@ paste this into your dashboard YAML:
 type: custom:mevo-card
 title: Mevo Stations
 stations:
-  - entity: sensor.station_gda001
+  - sensor.station_gda001
   - entity: sensor.station_gda002
     name: Plac Solidarności
 ```
@@ -43,12 +43,16 @@ stations:
 | `stations` | list   | _req._  | Stations to display.                                    |
 | `extra`    | string | _none_  | Extra indicator per badge: `docks` or `capacity`.       |
 
-Each entry under `stations` accepts:
+Each entry under `stations` is either an entity ID string, or an
+object with these fields:
 
 | Option   | Type   | Default                                | Description                          |
 | -------- | ------ | -------------------------------------- | ------------------------------------ |
 | `entity` | string | _req._                                 | The Mevo sensor entity ID.           |
 | `name`   | string | sensor's friendly name → entity ID     | Override the badge title.            |
+
+The visual editor only sets the entity list — to use the `name`
+override, edit the YAML directly.
 
 The card reads `bikes_available` and `ebikes_available` from each
 sensor's attributes. Counts of `0` are highlighted in the theme's
