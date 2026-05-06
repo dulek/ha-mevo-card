@@ -197,31 +197,46 @@ class MevoCard extends LitElement {
     }
 }
 
-const EDITOR_SCHEMA = [
-    { name: "title", selector: { text: {} } },
-    {
-        name: "extra",
-        selector: {
-            select: {
-                multiple: true,
-                options: [
-                    { value: "docks", label: "Docks available" },
-                    { value: "capacity", label: "Capacity" },
-                ],
+const buildEditorSchema = (entities) => {
+    const base = [
+        { name: "title", selector: { text: {} } },
+        {
+            name: "extra",
+            selector: {
+                select: {
+                    multiple: true,
+                    options: [
+                        { value: "docks", label: "Docks available" },
+                        { value: "capacity", label: "Capacity" },
+                    ],
+                },
             },
         },
-    },
-    {
-        name: "stations",
-        required: true,
-        selector: {
-            entity: {
-                multiple: true,
-                filter: { integration: "mevo" },
+        {
+            name: "stations",
+            required: true,
+            selector: {
+                entity: {
+                    multiple: true,
+                    filter: { integration: "mevo" },
+                },
             },
         },
-    },
-];
+    ];
+    if (entities.length === 0) return base;
+    return [
+        ...base,
+        {
+            name: "names",
+            type: "expandable",
+            title: "Station name overrides",
+            schema: entities.map((entity) => ({
+                name: entity,
+                selector: { text: {} },
+            })),
+        },
+    ];
+};
 
 
 class MevoCardEditor extends LitElement {
@@ -236,12 +251,14 @@ class MevoCardEditor extends LitElement {
 
     render() {
         if (!this.hass || !this._config) return nothing;
+        const entities = (this._config.stations || []).map((s) =>
+            typeof s === "string" ? s : s.entity);
         return html`
             <ha-form
                 .hass=${this.hass}
                 .data=${this._asFormData()}
-                .schema=${EDITOR_SCHEMA}
-                .computeLabel=${MevoCardEditor._computeLabel}
+                .schema=${buildEditorSchema(entities)}
+                .computeLabel=${this._computeLabel.bind(this)}
                 @value-changed=${this._valueChanged}
             ></ha-form>
         `;
@@ -251,33 +268,41 @@ class MevoCardEditor extends LitElement {
         const stations = this._config.stations || [];
         let extra = this._config.extra ?? [];
         if (typeof extra === "string") extra = [extra];
+        const names = {};
+        stations.forEach((s) => {
+            if (typeof s === "object" && s.entity && s.name) {
+                names[s.entity] = s.name;
+            }
+        });
         return {
             title: this._config.title || "",
             extra,
             stations: stations.map((s) =>
                 typeof s === "string" ? s : s.entity),
+            names,
         };
     }
 
-    static _computeLabel(schema) {
+    _computeLabel(schema) {
         switch (schema.name) {
             case "title": return "Title";
             case "extra": return "Extra indicators";
             case "stations": return "Stations";
-            default: return schema.name;
+            case "names": return "Station name overrides";
+            default: {
+                const state = this.hass.states[schema.name];
+                return state?.attributes?.friendly_name || schema.name;
+            }
         }
     }
 
     _valueChanged(e) {
         const formData = e.detail.value;
-        const oldStations = this._config.stations || [];
-        const newStations = (formData.stations || []).map((entity) => {
-            const existing = oldStations.find((s) =>
-                (typeof s === "string" ? s : s.entity) === entity);
-            if (existing && typeof existing === "object" && existing.name) {
-                return existing;
-            }
-            return { entity };
+        const entities = formData.stations || [];
+        const names = formData.names || {};
+        const newStations = entities.map((entity) => {
+            const name = names[entity];
+            return name ? { entity, name } : { entity };
         });
 
         const newConfig = { ...this._config, stations: newStations };

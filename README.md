@@ -51,9 +51,6 @@ object with these fields:
 | `entity` | string | _req._                                 | The Mevo sensor entity ID.           |
 | `name`   | string | sensor's friendly name → entity ID     | Override the badge title.            |
 
-The visual editor only sets the entity list — to use the `name`
-override, edit the YAML directly.
-
 The card reads `bikes_available` and `ebikes_available` from each
 sensor's attributes. Counts of `0` are highlighted in the theme's
 error color.
