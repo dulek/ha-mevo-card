@@ -80,6 +80,10 @@ class MevoCard extends LitElement {
         };
     }
 
+    static getConfigElement() {
+        return document.createElement("mevo-card-editor");
+    }
+
     shouldUpdate(changedProps) {
         if (changedProps.has("_config")) return true;
         if (!changedProps.has("hass")) return false;
@@ -142,7 +146,129 @@ class MevoCard extends LitElement {
     }
 }
 
+class MevoCardEditor extends LitElement {
+    static properties = {
+        hass: { attribute: false },
+        _config: { state: true },
+    };
+
+    static styles = css`
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .row ha-entity-picker {
+            flex: 2;
+        }
+        .row ha-textfield {
+            flex: 1;
+        }
+        ha-textfield {
+            display: block;
+            margin-bottom: 12px;
+        }
+        .stations-header {
+            font-weight: 500;
+            margin: 12px 0 8px;
+        }
+        mwc-button {
+            margin-top: 8px;
+        }
+    `;
+
+    setConfig(config) {
+        this._config = config;
+    }
+
+    render() {
+        if (!this.hass || !this._config) return nothing;
+        const stations = this._config.stations || [];
+        return html`
+            <ha-textfield
+                label="Title (optional)"
+                .value=${this._config.title || ""}
+                @input=${this._titleChanged}
+            ></ha-textfield>
+            <div class="stations-header">Stations</div>
+            ${stations.map((station, index) => html`
+                <div class="row">
+                    <ha-entity-picker
+                        .hass=${this.hass}
+                        .value=${station.entity || ""}
+                        .includeDomains=${["sensor"]}
+                        .entityFilter=${MevoCardEditor._isMevoSensor}
+                        allow-custom-entity
+                        @value-changed=${(e) =>
+                            this._stationChanged(index, "entity", e.detail.value)}
+                    ></ha-entity-picker>
+                    <ha-textfield
+                        label="Name (optional)"
+                        .value=${station.name || ""}
+                        @input=${(e) =>
+                            this._stationChanged(index, "name", e.target.value)}
+                    ></ha-textfield>
+                    <ha-icon-button
+                        label="Remove"
+                        @click=${() => this._removeStation(index)}
+                    >
+                        <ha-icon icon="mdi:delete"></ha-icon>
+                    </ha-icon-button>
+                </div>
+            `)}
+            <mwc-button @click=${this._addStation}>Add station</mwc-button>
+        `;
+    }
+
+    static _isMevoSensor(stateObj) {
+        return "bikes_available" in stateObj.attributes
+            || "ebikes_available" in stateObj.attributes;
+    }
+
+    _emitConfig(newConfig) {
+        this._config = newConfig;
+        this.dispatchEvent(new CustomEvent("config-changed", {
+            detail: { config: newConfig },
+            bubbles: true,
+            composed: true,
+        }));
+    }
+
+    _titleChanged(e) {
+        const value = e.target.value;
+        const newConfig = { ...this._config };
+        if (value) newConfig.title = value;
+        else delete newConfig.title;
+        this._emitConfig(newConfig);
+    }
+
+    _stationChanged(index, key, value) {
+        const stations = [...(this._config.stations || [])];
+        const station = { ...stations[index] };
+        if (value) station[key] = value;
+        else delete station[key];
+        stations[index] = station;
+        this._emitConfig({ ...this._config, stations });
+    }
+
+    _addStation() {
+        const stations = [
+            ...(this._config.stations || []),
+            { entity: "" },
+        ];
+        this._emitConfig({ ...this._config, stations });
+    }
+
+    _removeStation(index) {
+        const stations = (this._config.stations || [])
+            .filter((_, i) => i !== index);
+        this._emitConfig({ ...this._config, stations });
+    }
+}
+
 customElements.define("mevo-card", MevoCard);
+customElements.define("mevo-card-editor", MevoCardEditor);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
