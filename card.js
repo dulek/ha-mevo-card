@@ -45,6 +45,11 @@ class MevoCard extends LitElement {
         .mevo-badge-unavail {
             color: var(--error-color, #b71c1c);
         }
+        .mevo-badge-link {
+            color: inherit;
+            text-decoration: none;
+            cursor: pointer;
+        }
     `;
 
     setConfig(config) {
@@ -125,24 +130,32 @@ class MevoCard extends LitElement {
             || station.entity;
         const bikes = state.attributes.bikes_available ?? "?";
         const ebikes = state.attributes.ebikes_available ?? "?";
+        const rentalUri = state.attributes.rental_uri;
 
-        return html`
-            <div class="mevo-badge">
-                <div class="mevo-badge-title">${name}</div>
-                <div class="mevo-badge-icons">
-                    <span class="mevo-badge-icon ${
-                        bikes === 0 ? "mevo-badge-unavail" : ""}">
-                        <ha-state-icon icon="mdi:bicycle"></ha-state-icon>
-                        ${bikes}
-                    </span>
-                    <span class="mevo-badge-icon ${
-                        ebikes === 0 ? "mevo-badge-unavail" : ""}">
-                        <ha-state-icon icon="mdi:bicycle-electric"></ha-state-icon>
-                        ${ebikes}
-                    </span>
-                </div>
+        const body = html`
+            <div class="mevo-badge-title">${name}</div>
+            <div class="mevo-badge-icons">
+                <span class="mevo-badge-icon ${
+                    bikes === 0 ? "mevo-badge-unavail" : ""}">
+                    <ha-state-icon icon="mdi:bicycle"></ha-state-icon>
+                    ${bikes}
+                </span>
+                <span class="mevo-badge-icon ${
+                    ebikes === 0 ? "mevo-badge-unavail" : ""}">
+                    <ha-state-icon icon="mdi:bicycle-electric"></ha-state-icon>
+                    ${ebikes}
+                </span>
             </div>
         `;
+
+        if (rentalUri) {
+            return html`
+                <a class="mevo-badge mevo-badge-link" href=${rentalUri}>
+                    ${body}
+                </a>
+            `;
+        }
+        return html`<div class="mevo-badge">${body}</div>`;
     }
 }
 
