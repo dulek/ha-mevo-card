@@ -192,7 +192,29 @@ class MevoCardEditor extends LitElement {
     static properties = {
         hass: { attribute: false },
         _config: { state: true },
+        _helpersLoaded: { state: true },
     };
+
+    constructor() {
+        super();
+        this._helpersLoaded = false;
+        this._loadHelpers();
+    }
+
+    async _loadHelpers() {
+        if (customElements.get("ha-entity-picker")) {
+            this._helpersLoaded = true;
+            return;
+        }
+        const helpers = await window.loadCardHelpers();
+        const probe = await helpers.createCardElement({
+            type: "entities", entities: [],
+        });
+        if (probe.constructor.getConfigElement) {
+            await probe.constructor.getConfigElement();
+        }
+        this._helpersLoaded = true;
+    }
 
     static styles = css`
         .row {
@@ -225,7 +247,7 @@ class MevoCardEditor extends LitElement {
     }
 
     render() {
-        if (!this.hass || !this._config) return nothing;
+        if (!this.hass || !this._config || !this._helpersLoaded) return nothing;
         const stations = this._config.stations || [];
         return html`
             <ha-textfield
