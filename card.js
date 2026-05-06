@@ -219,7 +219,7 @@ class MevoCardEditor extends LitElement {
     static styles = css`
         .row {
             display: flex;
-            align-items: center;
+            align-items: flex-end;
             gap: 8px;
             margin-bottom: 8px;
         }
@@ -263,6 +263,7 @@ class MevoCardEditor extends LitElement {
             ${stations.map((station, index) => html`
                 <div class="row">
                     <ha-entity-picker
+                        label="Station"
                         .hass=${this.hass}
                         .value=${station.entity || ""}
                         .includeDomains=${["sensor"]}
@@ -292,7 +293,6 @@ class MevoCardEditor extends LitElement {
                 >
                     <ha-icon icon="mdi:plus"></ha-icon>
                 </ha-icon-button>
-                Add station
             </div>
         `;
     }
