@@ -4,7 +4,9 @@ Lovelace card for the [ha-mevo](https://github.com/dulek/ha_mevo)
 integration. Displays a compact row of badges with available bikes and
 e-bikes for each Mevo station you monitor.
 
-![Mevo Card screenshot](screenshot.png)
+![Mevo Card screenshot](screenshot-list.png)
+
+![Mevo Card screenshot with map](screenshot-map.png)
 
 ## Installation
 
