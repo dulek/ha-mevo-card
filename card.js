@@ -208,7 +208,13 @@ class MevoCard extends LitElement {
             const bikes = state.attributes.bikes_available ?? "?";
             const ebikes = state.attributes.ebikes_available ?? "?";
             const rentalUri = state.attributes.rental_uri;
+            const safeName = String(name)
+                .replace(/&/g, "&amp;")
+                .replace(/"/g, "&quot;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
             const attrs = [
+                `name="${safeName}"`,
                 `bikes="${bikes}"`,
                 `ebikes="${ebikes}"`,
             ].join(" ");
@@ -218,11 +224,6 @@ class MevoCard extends LitElement {
                 iconSize: null,
             });
             const marker = L.marker([lat, lng], { icon, title: name });
-            marker.bindTooltip(name, {
-                direction: "top",
-                offset: [0, -8],
-                opacity: 0.95,
-            });
             if (rentalUri) {
                 marker.on("click", () => {
                     window.open(rentalUri, "_blank", "noopener");
@@ -230,6 +231,12 @@ class MevoCard extends LitElement {
             }
             markers.push(marker);
             latlngs.push([lat, lng]);
+        }
+
+        const homeMarker = this._buildHomeMarker(L);
+        if (homeMarker) {
+            markers.push(homeMarker.marker);
+            latlngs.push(homeMarker.latlng);
         }
 
         if (!this._layersEqual(this._mapLayers, markers)) {
@@ -241,6 +248,24 @@ class MevoCard extends LitElement {
             await this.updateComplete;
             this._fitBounds();
         }
+    }
+
+    _buildHomeMarker(L) {
+        const home = this._config.home;
+        if (!home) return null;
+        const state = this.hass.states[home];
+        if (!state) return null;
+        const lat = state.attributes.latitude;
+        const lng = state.attributes.longitude;
+        if (typeof lat !== "number" || typeof lng !== "number") return null;
+        const name = state.attributes.friendly_name || home;
+        const icon = L.divIcon({
+            html: '<mevo-home-marker></mevo-home-marker>',
+            className: "mevo-home-marker-wrapper",
+            iconSize: null,
+        });
+        const marker = L.marker([lat, lng], { icon, title: name });
+        return { marker, latlng: [lat, lng] };
     }
 
     _layersEqual(a, b) {
@@ -267,8 +292,20 @@ class MevoCard extends LitElement {
             await new Promise((r) => setTimeout(r, 50));
         }
         if (!haMap.leafletMap) return;
-        const bounds = this._L.latLngBounds(this._pendingFit);
-        haMap.leafletMap.fitBounds(bounds, { padding: [32, 32], maxZoom: 16 });
+        if (this._config.zoom != null) {
+            const lats = this._pendingFit.map(([lat]) => lat);
+            const lngs = this._pendingFit.map(([, lng]) => lng);
+            const center = [
+                (Math.min(...lats) + Math.max(...lats)) / 2,
+                (Math.min(...lngs) + Math.max(...lngs)) / 2,
+            ];
+            haMap.leafletMap.setView(center, this._config.zoom);
+        } else {
+            haMap.leafletMap.fitBounds(
+                this._pendingFit,
+                { padding: [32, 32], maxZoom: 16 },
+            );
+        }
         this._pendingFit = null;
         this._fitDone = true;
     }
@@ -355,6 +392,7 @@ class MevoCard extends LitElement {
 
 class MevoMapMarker extends LitElement {
     static properties = {
+        name: {},
         bikes: {},
         ebikes: {},
     };
@@ -362,20 +400,31 @@ class MevoMapMarker extends LitElement {
     static styles = css`
         :host {
             display: inline-flex;
+            flex-direction: column;
             align-items: center;
-            gap: 10px;
+            gap: 2px;
             background: var(--card-background-color, white);
             color: var(--primary-text-color, #212121);
             border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
-            border-radius: 14px;
-            padding: 3px 8px;
+            border-radius: 12px;
+            padding: 4px 10px;
             font-size: 13px;
-            font-weight: 500;
-            line-height: 1;
+            line-height: 1.2;
             white-space: nowrap;
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
             transform: translate(-50%, -100%);
             margin-top: -4px;
+        }
+        .name {
+            font-weight: 600;
+            max-width: 180px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .counts {
+            display: inline-flex;
+            gap: 10px;
+            font-weight: 500;
         }
         .count {
             display: inline-flex;
@@ -395,12 +444,15 @@ class MevoMapMarker extends LitElement {
 
     render() {
         return html`
-            <span class="count ${MevoMapMarker._tier(this.bikes)}">
-                <ha-icon icon="mdi:bicycle"></ha-icon>${this.bikes}
-            </span>
-            <span class="count ${MevoMapMarker._tier(this.ebikes)}">
-                <ha-icon icon="mdi:bicycle-electric"></ha-icon>${this.ebikes}
-            </span>
+            ${this.name ? html`<div class="name">${this.name}</div>` : nothing}
+            <div class="counts">
+                <span class="count ${MevoMapMarker._tier(this.bikes)}">
+                    <ha-icon icon="mdi:bicycle"></ha-icon>${this.bikes}
+                </span>
+                <span class="count ${MevoMapMarker._tier(this.ebikes)}">
+                    <ha-icon icon="mdi:bicycle-electric"></ha-icon>${this.ebikes}
+                </span>
+            </div>
         `;
     }
 
@@ -412,33 +464,94 @@ class MevoMapMarker extends LitElement {
     }
 }
 
-const BASE_SCHEMA = [
-    { name: "title", selector: { text: {} } },
-    {
-        name: "view",
-        selector: {
-            select: {
-                mode: "dropdown",
-                options: [
-                    { value: "list", label: "List" },
-                    { value: "map", label: "Map" },
-                ],
+class MevoHomeMarker extends LitElement {
+    static styles = css`
+        :host {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--primary-color, #03a9f4);
+            color: var(--text-primary-color, white);
+            border: 2px solid var(--card-background-color, white);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+            transform: translate(-50%, -50%);
+        }
+        ha-icon {
+            --mdc-icon-size: 18px;
+        }
+    `;
+
+    render() {
+        return html`<ha-icon icon="mdi:home"></ha-icon>`;
+    }
+}
+
+const buildBaseSchema = (view, fitMode) => {
+    const schema = [
+        { name: "title", selector: { text: {} } },
+        {
+            name: "view",
+            selector: {
+                select: {
+                    mode: "dropdown",
+                    options: [
+                        { value: "list", label: "List" },
+                        { value: "map", label: "Map" },
+                    ],
+                },
             },
         },
-    },
-    {
-        name: "extra",
-        selector: {
-            select: {
-                multiple: true,
-                options: [
-                    { value: "docks", label: "Docks available" },
-                    { value: "capacity", label: "Capacity" },
-                ],
+    ];
+    if (view === "map") {
+        schema.push({
+            name: "home",
+            selector: {
+                entity: {
+                    filter: {
+                        domain: ["zone", "person", "device_tracker"],
+                    },
+                },
             },
-        },
-    },
-];
+        });
+        schema.push({
+            name: "fit",
+            selector: {
+                select: {
+                    mode: "dropdown",
+                    options: [
+                        { value: "auto", label: "Auto-fit to stations" },
+                        { value: "fixed", label: "Fixed zoom" },
+                    ],
+                },
+            },
+        });
+        if (fitMode === "fixed") {
+            schema.push({
+                name: "zoom",
+                selector: {
+                    number: { min: 1, max: 25, step: 1, mode: "slider" },
+                },
+            });
+        }
+    } else {
+        schema.push({
+            name: "extra",
+            selector: {
+                select: {
+                    multiple: true,
+                    options: [
+                        { value: "docks", label: "Docks available" },
+                        { value: "capacity", label: "Capacity" },
+                    ],
+                },
+            },
+        });
+    }
+    return schema;
+};
 
 const STATION_DETAIL_SCHEMA = [
     { name: "name", selector: { text: {} } },
@@ -551,15 +664,20 @@ class MevoCardEditor extends LitElement {
 
     _renderMain() {
         const stations = this._stations();
+        const view = this._config.view || "list";
+        const fit = this._config.zoom != null ? "fixed" : "auto";
         return html`
             <ha-form
                 .hass=${this.hass}
                 .data=${{
                     title: this._config.title || "",
-                    view: this._config.view || "list",
+                    view,
+                    home: this._config.home || "",
+                    fit,
                     extra: this._asExtraArray(),
+                    zoom: this._config.zoom ?? 16,
                 }}
-                .schema=${BASE_SCHEMA}
+                .schema=${buildBaseSchema(view, fit)}
                 .computeLabel=${MevoCardEditor._computeLabel}
                 @value-changed=${this._baseChanged}
             ></ha-form>
@@ -667,6 +785,9 @@ class MevoCardEditor extends LitElement {
         switch (schema.name) {
             case "title": return "Title";
             case "view": return "View";
+            case "home": return "Home location";
+            case "fit": return "Map fit";
+            case "zoom": return "Zoom";
             case "extra": return "Extra indicators";
             default: return schema.name;
         }
@@ -682,7 +803,21 @@ class MevoCardEditor extends LitElement {
         } else {
             delete newConfig.view;
         }
-        if (formData.extra && formData.extra.length > 0) {
+        if (newConfig.view === "map" && formData.home) {
+            newConfig.home = formData.home;
+        } else {
+            delete newConfig.home;
+        }
+        if (newConfig.view === "map"
+            && formData.fit === "fixed"
+            && Number.isFinite(formData.zoom)) {
+            newConfig.zoom = formData.zoom;
+        } else {
+            delete newConfig.zoom;
+        }
+        if (newConfig.view !== "map"
+            && formData.extra
+            && formData.extra.length > 0) {
             newConfig.extra = formData.extra;
         } else {
             delete newConfig.extra;
@@ -744,6 +879,7 @@ class MevoCardEditor extends LitElement {
 customElements.define("mevo-card", MevoCard);
 customElements.define("mevo-card-editor", MevoCardEditor);
 customElements.define("mevo-map-marker", MevoMapMarker);
+customElements.define("mevo-home-marker", MevoHomeMarker);
 
 window.customCards = window.customCards || [];
 window.customCards.push({

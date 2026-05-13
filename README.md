@@ -54,7 +54,8 @@ stations:
 | `view`     | string | `list`  | `list` for chip badges, `map` for a Leaflet map.        |
 | `stations` | list   | _req._  | Stations to display.                                    |
 | `extra`    | list   | _none_  | Extra indicators per badge: any of `docks`, `capacity` (list view only). |
-| `zoom`     | number | `13`    | Initial map zoom level (map view only).                 |
+| `home`     | string | _none_  | Optional entity ID (zone, person, or device_tracker) shown as a home marker on the map and included in auto-fit / fixed-zoom centering. |
+| `zoom`     | number | _none_  | Exact zoom level (map view only). When set, disables auto-fit and centers on the stations' (and home, if set) midpoint at this zoom. Omit for auto-fit. |
 
 Each entry under `stations` is either an entity ID string, or an
 object with these fields:
