@@ -35,13 +35,26 @@ stations:
     name: Plac Solidarności
 ```
 
+Switch to map view by adding `view: map`:
+
+```yaml
+type: custom:mevo-card
+title: Mevo Stations
+view: map
+stations:
+  - sensor.station_gda001
+  - sensor.station_gda002
+```
+
 ### Options
 
 | Option     | Type   | Default | Description                                             |
 | ---------- | ------ | ------- | ------------------------------------------------------- |
 | `title`    | string | _none_  | Header rendered at the top of the card.                 |
+| `view`     | string | `list`  | `list` for chip badges, `map` for a Leaflet map.        |
 | `stations` | list   | _req._  | Stations to display.                                    |
-| `extra`    | list   | _none_  | Extra indicators per badge: any of `docks`, `capacity`. |
+| `extra`    | list   | _none_  | Extra indicators per badge: any of `docks`, `capacity` (list view only). |
+| `zoom`     | number | `13`    | Initial map zoom level (map view only).                 |
 
 Each entry under `stations` is either an entity ID string, or an
 object with these fields:
@@ -53,7 +66,9 @@ object with these fields:
 
 The card reads `bikes_available` and `ebikes_available` from each
 sensor's attributes. Counts of `0` are highlighted in the theme's
-error color.
+error color. Map view additionally requires `latitude` and
+`longitude` attributes on each sensor, which the
+[ha-mevo](https://github.com/dulek/ha_mevo) integration provides.
 
 ## Compatibility
 

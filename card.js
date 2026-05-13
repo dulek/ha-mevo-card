@@ -10,10 +10,32 @@ console.info(
     "color: #00b8d4; background: white; font-weight: 700;",
 );
 
+let _leafletPromise = null;
+function loadLeaflet() {
+    if (!_leafletPromise) {
+        _leafletPromise = import(
+            "https://unpkg.com/leaflet@1.9.4/dist/leaflet-src.esm.js"
+        ).then((mod) => mod.default || mod);
+    }
+    return _leafletPromise;
+}
+
+let _haMapPromise = null;
+function ensureHaMap() {
+    if (customElements.get("ha-map")) return Promise.resolve();
+    if (_haMapPromise) return _haMapPromise;
+    _haMapPromise = (async () => {
+        const helpers = await window.loadCardHelpers();
+        await helpers.createCardElement({ type: "map", entities: [] });
+    })();
+    return _haMapPromise;
+}
+
 class MevoCard extends LitElement {
     static properties = {
         hass: { attribute: false },
         _config: { state: true },
+        _mapLayers: { state: true },
     };
 
     static styles = css`
@@ -53,6 +75,13 @@ class MevoCard extends LitElement {
             text-decoration: none;
             cursor: pointer;
         }
+        ha-map {
+            display: block;
+            height: var(--mevo-map-height, 350px);
+            border-radius: 0 0 var(--ha-card-border-radius, 12px)
+                var(--ha-card-border-radius, 12px);
+            overflow: hidden;
+        }
     `;
 
     setConfig(config) {
@@ -63,12 +92,15 @@ class MevoCard extends LitElement {
         }
         let extra = config.extra ?? [];
         if (typeof extra === "string") extra = [extra];
+        const view = config.view === "map" ? "map" : "list";
         this._config = {
             ...config,
+            view,
             extra,
             stations: config.stations.map((s) =>
                 typeof s === "string" ? { entity: s } : s),
         };
+        this._fitDone = false;
     }
 
     static getStubConfig() {
@@ -83,10 +115,19 @@ class MevoCard extends LitElement {
 
     getCardSize() {
         if (!this._config) return 1;
+        if (this._config.view === "map") return 5;
         return 1 + Math.ceil(this._config.stations.length / 4);
     }
 
     getLayoutOptions() {
+        if (this._config?.view === "map") {
+            return {
+                grid_columns: 4,
+                grid_rows: 5,
+                grid_min_columns: 2,
+                grid_min_rows: 3,
+            };
+        }
         return {
             grid_columns: 4,
             grid_rows: "auto",
@@ -101,6 +142,7 @@ class MevoCard extends LitElement {
 
     shouldUpdate(changedProps) {
         if (changedProps.has("_config")) return true;
+        if (changedProps.has("_mapLayers")) return true;
         if (!changedProps.has("hass")) return false;
         const oldHass = changedProps.get("hass");
         if (!oldHass || !this._config) return true;
@@ -110,16 +152,130 @@ class MevoCard extends LitElement {
         ));
     }
 
+    updated(changedProps) {
+        super.updated(changedProps);
+        if (this._config?.view !== "map") return;
+        this._refreshMarkers();
+    }
+
     render() {
         if (!this._config || !this.hass) return nothing;
-        return html`
-            <ha-card .header=${this._config.title || nothing}>
+        const body = this._config.view === "map"
+            ? this._renderMap()
+            : html`
                 <div class="chip-container">
                     ${this._config.stations.map(
                         (station) => this._renderStation(station))}
                 </div>
+            `;
+        return html`
+            <ha-card .header=${this._config.title || nothing}>
+                ${body}
             </ha-card>
         `;
+    }
+
+    _renderMap() {
+        return html`
+            <ha-map
+                .hass=${this.hass}
+                .entities=${[]}
+                .layers=${this._mapLayers || []}
+                .zoom=${this._config.zoom ?? 13}
+            ></ha-map>
+        `;
+    }
+
+    async _refreshMarkers() {
+        const token = ++this._markerToken;
+        const [L] = await Promise.all([loadLeaflet(), ensureHaMap()]);
+        if (token !== this._markerToken) return;
+        if (!this.hass || !this._config) return;
+
+        this._L = L;
+        const markers = [];
+        const latlngs = [];
+        for (const station of this._config.stations) {
+            const state = this.hass.states[station.entity];
+            if (!state) continue;
+            const lat = state.attributes.latitude;
+            const lng = state.attributes.longitude;
+            if (typeof lat !== "number" || typeof lng !== "number") continue;
+
+            const name = station.name
+                || state.attributes.friendly_name
+                || station.entity;
+            const bikes = state.attributes.bikes_available ?? "?";
+            const ebikes = state.attributes.ebikes_available ?? "?";
+            const rentalUri = state.attributes.rental_uri;
+            const attrs = [
+                `bikes="${bikes}"`,
+                `ebikes="${ebikes}"`,
+            ].join(" ");
+            const icon = L.divIcon({
+                html: `<mevo-map-marker ${attrs}></mevo-map-marker>`,
+                className: "mevo-map-marker-wrapper",
+                iconSize: null,
+            });
+            const marker = L.marker([lat, lng], { icon, title: name });
+            marker.bindTooltip(name, {
+                direction: "top",
+                offset: [0, -8],
+                opacity: 0.95,
+            });
+            if (rentalUri) {
+                marker.on("click", () => {
+                    window.open(rentalUri, "_blank", "noopener");
+                });
+            }
+            markers.push(marker);
+            latlngs.push([lat, lng]);
+        }
+
+        if (!this._layersEqual(this._mapLayers, markers)) {
+            this._mapLayers = markers;
+        }
+        if (!this._fitDone && latlngs.length > 0) {
+            this._pendingFit = latlngs;
+            // Defer the fitBounds until ha-map has consumed the new layers.
+            await this.updateComplete;
+            this._fitBounds();
+        }
+    }
+
+    _layersEqual(a, b) {
+        if (!a || a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i += 1) {
+            const al = a[i].getLatLng();
+            const bl = b[i].getLatLng();
+            if (al.lat !== bl.lat || al.lng !== bl.lng) return false;
+            const ah = a[i].options.icon?.options.html;
+            const bh = b[i].options.icon?.options.html;
+            if (ah !== bh) return false;
+        }
+        return true;
+    }
+
+    async _fitBounds() {
+        if (!this._pendingFit || this._pendingFit.length === 0) return;
+        const haMap = this.renderRoot.querySelector("ha-map");
+        if (!haMap || !this._L) return;
+        if (haMap.updateComplete) await haMap.updateComplete;
+        // ha-map sets up Leaflet asynchronously in firstUpdated;
+        // poll briefly for leafletMap to appear.
+        for (let i = 0; i < 30 && !haMap.leafletMap; i += 1) {
+            await new Promise((r) => setTimeout(r, 50));
+        }
+        if (!haMap.leafletMap) return;
+        const bounds = this._L.latLngBounds(this._pendingFit);
+        haMap.leafletMap.fitBounds(bounds, { padding: [32, 32], maxZoom: 16 });
+        this._pendingFit = null;
+        this._fitDone = true;
+    }
+
+    constructor() {
+        super();
+        this._markerToken = 0;
     }
 
     _renderStation(station) {
@@ -197,8 +353,79 @@ class MevoCard extends LitElement {
     }
 }
 
+class MevoMapMarker extends LitElement {
+    static properties = {
+        bikes: {},
+        ebikes: {},
+    };
+
+    static styles = css`
+        :host {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--card-background-color, white);
+            color: var(--primary-text-color, #212121);
+            border: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+            border-radius: 14px;
+            padding: 3px 8px;
+            font-size: 13px;
+            font-weight: 500;
+            line-height: 1;
+            white-space: nowrap;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+            transform: translate(-50%, -100%);
+            margin-top: -4px;
+        }
+        .count {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .unavail {
+            color: var(--error-color, #b71c1c);
+        }
+        .low {
+            color: var(--warning-color, #ff9800);
+        }
+        ha-icon {
+            --mdc-icon-size: 16px;
+        }
+    `;
+
+    render() {
+        return html`
+            <span class="count ${MevoMapMarker._tier(this.bikes)}">
+                <ha-icon icon="mdi:bicycle"></ha-icon>${this.bikes}
+            </span>
+            <span class="count ${MevoMapMarker._tier(this.ebikes)}">
+                <ha-icon icon="mdi:bicycle-electric"></ha-icon>${this.ebikes}
+            </span>
+        `;
+    }
+
+    static _tier(value) {
+        const n = Number(value);
+        if (n === 0) return "unavail";
+        if (Number.isFinite(n) && n <= 2) return "low";
+        return "";
+    }
+}
+
 const BASE_SCHEMA = [
     { name: "title", selector: { text: {} } },
+    {
+        name: "view",
+        selector: {
+            select: {
+                mode: "dropdown",
+                options: [
+                    { value: "list", label: "List" },
+                    { value: "map", label: "Map" },
+                ],
+            },
+        },
+    },
     {
         name: "extra",
         selector: {
@@ -329,6 +556,7 @@ class MevoCardEditor extends LitElement {
                 .hass=${this.hass}
                 .data=${{
                     title: this._config.title || "",
+                    view: this._config.view || "list",
                     extra: this._asExtraArray(),
                 }}
                 .schema=${BASE_SCHEMA}
@@ -438,6 +666,7 @@ class MevoCardEditor extends LitElement {
     static _computeLabel(schema) {
         switch (schema.name) {
             case "title": return "Title";
+            case "view": return "View";
             case "extra": return "Extra indicators";
             default: return schema.name;
         }
@@ -448,6 +677,11 @@ class MevoCardEditor extends LitElement {
         const newConfig = { ...this._config };
         if (formData.title) newConfig.title = formData.title;
         else delete newConfig.title;
+        if (formData.view && formData.view !== "list") {
+            newConfig.view = formData.view;
+        } else {
+            delete newConfig.view;
+        }
         if (formData.extra && formData.extra.length > 0) {
             newConfig.extra = formData.extra;
         } else {
@@ -509,6 +743,7 @@ class MevoCardEditor extends LitElement {
 
 customElements.define("mevo-card", MevoCard);
 customElements.define("mevo-card-editor", MevoCardEditor);
+customElements.define("mevo-map-marker", MevoMapMarker);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
