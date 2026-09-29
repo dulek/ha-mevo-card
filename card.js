@@ -2,23 +2,13 @@ import {
     LitElement, html, css, nothing,
 } from "https://unpkg.com/lit@3.1.0/index.js?module";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 
 console.info(
     `%c MEVO-CARD %c v${VERSION} `,
     "color: white; background: #00b8d4; font-weight: 700;",
     "color: #00b8d4; background: white; font-weight: 700;",
 );
-
-let _leafletPromise = null;
-function loadLeaflet() {
-    if (!_leafletPromise) {
-        _leafletPromise = import(
-            "https://unpkg.com/leaflet@1.9.4/dist/leaflet-src.esm.js"
-        ).then((mod) => mod.default || mod);
-    }
-    return _leafletPromise;
-}
 
 let _haMapPromise = null;
 function ensureHaMap() {
@@ -27,7 +17,11 @@ function ensureHaMap() {
     _haMapPromise = (async () => {
         const helpers = await window.loadCardHelpers();
         await helpers.createCardElement({ type: "map", entities: [] });
-    })();
+        await customElements.whenDefined("ha-map");
+    })().catch((error) => {
+        _haMapPromise = null;
+        throw error;
+    });
     return _haMapPromise;
 }
 
@@ -35,7 +29,6 @@ class MevoCard extends LitElement {
     static properties = {
         hass: { attribute: false },
         _config: { state: true },
-        _mapLayers: { state: true },
     };
 
     static styles = css`
@@ -100,6 +93,15 @@ class MevoCard extends LitElement {
             stations: config.stations.map((s) =>
                 typeof s === "string" ? { entity: s } : s),
         };
+        this._markerToken += 1;
+        this._fitDone = false;
+        this._lastMapSignature = null;
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        this._markerToken += 1;
+        this._lastMapSignature = null;
         this._fitDone = false;
     }
 
@@ -142,10 +144,10 @@ class MevoCard extends LitElement {
 
     shouldUpdate(changedProps) {
         if (changedProps.has("_config")) return true;
-        if (changedProps.has("_mapLayers")) return true;
         if (!changedProps.has("hass")) return false;
         const oldHass = changedProps.get("hass");
         if (!oldHass || !this._config) return true;
+        if (this._config.view === "map") return true;
         return this._config.stations.some((station) => (
             oldHass.states[station.entity]
                 !== this.hass.states[station.entity]
@@ -180,27 +182,26 @@ class MevoCard extends LitElement {
             <ha-map
                 .hass=${this.hass}
                 .entities=${[]}
-                .layers=${this._mapLayers || []}
                 .zoom=${this._config.zoom ?? 13}
+                @editable-location-clicked=${this._locationClicked}
             ></ha-map>
         `;
     }
 
     async _refreshMarkers() {
-        const token = ++this._markerToken;
-        const [L] = await Promise.all([loadLeaflet(), ensureHaMap()]);
-        if (token !== this._markerToken) return;
+        await ensureHaMap();
         if (!this.hass || !this._config) return;
+        const haMap = this.renderRoot.querySelector("ha-map");
+        if (!haMap) return;
 
-        this._L = L;
-        const markers = [];
+        const stations = [];
         const latlngs = [];
         for (const station of this._config.stations) {
             const state = this.hass.states[station.entity];
             if (!state) continue;
             const lat = state.attributes.latitude;
             const lng = state.attributes.longitude;
-            if (typeof lat !== "number" || typeof lng !== "number") continue;
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
 
             const name = station.name
                 || state.attributes.friendly_name
@@ -208,105 +209,143 @@ class MevoCard extends LitElement {
             const bikes = state.attributes.bikes_available ?? "?";
             const ebikes = state.attributes.ebikes_available ?? "?";
             const rentalUri = state.attributes.rental_uri;
-            const safeName = String(name)
-                .replace(/&/g, "&amp;")
-                .replace(/"/g, "&quot;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;");
-            const attrs = [
-                `name="${safeName}"`,
-                `bikes="${bikes}"`,
-                `ebikes="${ebikes}"`,
-            ].join(" ");
-            const icon = L.divIcon({
-                html: `<mevo-map-marker ${attrs}></mevo-map-marker>`,
-                className: "mevo-map-marker-wrapper",
-                iconSize: null,
-            });
-            const marker = L.marker([lat, lng], { icon, title: name });
-            if (rentalUri) {
-                marker.on("click", () => {
-                    window.open(rentalUri, "_blank", "noopener");
-                });
-            }
-            markers.push(marker);
+            stations.push({ entity: station.entity, lat, lng, name,
+                bikes, ebikes, rentalUri });
             latlngs.push([lat, lng]);
         }
 
-        const homeMarker = this._buildHomeMarker(L);
-        if (homeMarker) {
-            markers.push(homeMarker.marker);
-            latlngs.push(homeMarker.latlng);
+        const home = this._homeLocation();
+        if (home) {
+            latlngs.push([home.lat, home.lng]);
         }
 
-        if (!this._layersEqual(this._mapLayers, markers)) {
-            this._mapLayers = markers;
+        const signature = JSON.stringify({ stations, home });
+        if (this._lastMapSignature === signature && this._lastHaMap === haMap) {
+            return;
         }
+        const token = ++this._markerToken;
+        if ("editableLocations" in haMap) {
+            haMap.editableLocations = this._buildEditableLocations(stations, home);
+        } else {
+            const L = await this._waitForLeaflet(haMap, token);
+            if (!L || token !== this._markerToken) return;
+            haMap.layers = this._buildLeafletLayers(L, stations, home);
+        }
+        this._lastMapSignature = signature;
+        this._lastHaMap = haMap;
         if (!this._fitDone && latlngs.length > 0) {
-            this._pendingFit = latlngs;
-            // Defer the fitBounds until ha-map has consumed the new layers.
-            await this.updateComplete;
-            this._fitBounds();
+            await haMap.updateComplete;
+            if (token === this._markerToken) this._fitBounds(haMap, latlngs);
         }
     }
 
-    _buildHomeMarker(L) {
+    _homeLocation() {
         const home = this._config.home;
         if (!home) return null;
         const state = this.hass.states[home];
         if (!state) return null;
         const lat = state.attributes.latitude;
         const lng = state.attributes.longitude;
-        if (typeof lat !== "number" || typeof lng !== "number") return null;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
         const name = state.attributes.friendly_name || home;
-        const icon = L.divIcon({
-            html: '<mevo-home-marker></mevo-home-marker>',
-            className: "mevo-home-marker-wrapper",
-            iconSize: null,
+        return { entity: home, lat, lng, name };
+    }
+
+    _buildEditableLocations(stations, home) {
+        const locations = stations.map((station) => {
+            const element = document.createElement("mevo-map-marker");
+            element.setAttribute("map-engine", "");
+            element.name = station.name;
+            element.bikes = station.bikes;
+            element.ebikes = station.ebikes;
+            return {
+                id: station.entity,
+                location: [station.lat, station.lng],
+                element,
+                elementSize: [180, 56],
+                title: station.name,
+                activatable: Boolean(station.rentalUri),
+            };
         });
-        const marker = L.marker([lat, lng], { icon, title: name });
-        return { marker, latlng: [lat, lng] };
+        if (home) {
+            const element = document.createElement("mevo-home-marker");
+            element.setAttribute("map-engine", "");
+            locations.push({
+                id: home.entity,
+                location: [home.lat, home.lng],
+                element,
+                elementSize: [34, 34],
+                title: home.name,
+            });
+        }
+        return locations;
     }
 
-    _layersEqual(a, b) {
-        if (!a || a.length !== b.length) return false;
-        for (let i = 0; i < a.length; i += 1) {
-            const al = a[i].getLatLng();
-            const bl = b[i].getLatLng();
-            if (al.lat !== bl.lat || al.lng !== bl.lng) return false;
-            const ah = a[i].options.icon?.options.html;
-            const bh = b[i].options.icon?.options.html;
-            if (ah !== bh) return false;
+    async _waitForLeaflet(haMap, token) {
+        // Older ha-map exposes its Leaflet instance after asynchronous setup.
+        for (let i = 0; i < 300; i += 1) {
+            if (haMap.leafletMap && haMap.Leaflet) return haMap.Leaflet;
+            if (token !== this._markerToken || !haMap.isConnected) return null;
+            await new Promise((resolve) => setTimeout(resolve, 100));
         }
-        return true;
+        return null;
     }
 
-    async _fitBounds() {
-        if (!this._pendingFit || this._pendingFit.length === 0) return;
-        const haMap = this.renderRoot.querySelector("ha-map");
-        if (!haMap || !this._L) return;
-        if (haMap.updateComplete) await haMap.updateComplete;
-        // ha-map sets up Leaflet asynchronously in firstUpdated;
-        // poll briefly for leafletMap to appear.
-        for (let i = 0; i < 30 && !haMap.leafletMap; i += 1) {
-            await new Promise((r) => setTimeout(r, 50));
+    _buildLeafletLayers(L, stations, home) {
+        const markers = stations.map((station) => {
+            const element = document.createElement("mevo-map-marker");
+            element.name = station.name;
+            element.bikes = station.bikes;
+            element.ebikes = station.ebikes;
+            const icon = L.divIcon({
+                html: element,
+                className: "mevo-map-marker-wrapper",
+                iconSize: null,
+            });
+            const marker = L.marker([station.lat, station.lng], {
+                icon, title: station.name,
+            });
+            if (station.rentalUri) {
+                marker.on("click", () => {
+                    window.open(station.rentalUri, "_blank", "noopener");
+                });
+            }
+            return marker;
+        });
+        if (home) {
+            const icon = L.divIcon({
+                html: document.createElement("mevo-home-marker"),
+                className: "mevo-home-marker-wrapper",
+                iconSize: null,
+            });
+            markers.push(L.marker([home.lat, home.lng], {
+                icon, title: home.name,
+            }));
         }
-        if (!haMap.leafletMap) return;
+        return markers;
+    }
+
+    _locationClicked(event) {
+        const station = this._config.stations.find(
+            (item) => item.entity === event.detail.id,
+        );
+        const rentalUri = this.hass.states[station?.entity]?.attributes.rental_uri;
+        if (rentalUri) window.open(rentalUri, "_blank", "noopener");
+    }
+
+    _fitBounds(haMap, latlngs) {
         if (this._config.zoom != null) {
-            const lats = this._pendingFit.map(([lat]) => lat);
-            const lngs = this._pendingFit.map(([, lng]) => lng);
+            const lats = latlngs.map(([lat]) => lat);
+            const lngs = latlngs.map(([, lng]) => lng);
             const center = [
                 (Math.min(...lats) + Math.max(...lats)) / 2,
                 (Math.min(...lngs) + Math.max(...lngs)) / 2,
             ];
-            haMap.leafletMap.setView(center, this._config.zoom);
+            if (haMap.setView) haMap.setView(center, this._config.zoom);
+            else haMap.leafletMap.setView(center, this._config.zoom);
         } else {
-            haMap.leafletMap.fitBounds(
-                this._pendingFit,
-                { padding: [32, 32], maxZoom: 16 },
-            );
+            haMap.fitBounds(latlngs, { zoom: 16, pad: 0.15 });
         }
-        this._pendingFit = null;
         this._fitDone = true;
     }
 
@@ -415,6 +454,14 @@ class MevoMapMarker extends LitElement {
             transform: translate(-50%, -100%);
             margin-top: -4px;
         }
+        :host([map-engine]) {
+            box-sizing: border-box;
+            width: 180px;
+            height: 56px;
+            justify-content: center;
+            transform: none;
+            margin-top: 0;
+        }
         .name {
             font-weight: 600;
             max-width: 180px;
@@ -478,6 +525,10 @@ class MevoHomeMarker extends LitElement {
             border: 2px solid var(--card-background-color, white);
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
             transform: translate(-50%, -50%);
+        }
+        :host([map-engine]) {
+            box-sizing: border-box;
+            transform: none;
         }
         ha-icon {
             --mdc-icon-size: 18px;
