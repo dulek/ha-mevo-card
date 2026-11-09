@@ -1,8 +1,10 @@
 # Mevo Card
 
-Lovelace card for the [ha-mevo](https://github.com/dulek/ha_mevo)
+Lovelace card for the [ha-mevo](https://github.com/dulek/ha-mevo)
 integration. Displays a compact row of badges with available bikes and
 e-bikes for each Mevo station you monitor.
+
+[![Open this repository in Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dulek&repository=ha-mevo-card&category=plugin)
 
 ![Mevo Card screenshot](screenshot-list.png)
 
@@ -10,11 +12,11 @@ e-bikes for each Mevo station you monitor.
 
 ## Installation
 
-### HACS
+### Marketplace or HACS
 
-1. Add this repository to HACS as a custom repository (category:
-   *Lovelace*).
-2. Install **Mevo Card** via HACS.
+1. Open the repository using the badge above. If it is not in the catalog yet,
+   add it as a custom dashboard plugin when prompted.
+2. Install **Mevo Card** in the Marketplace or HACS.
 3. Refresh the browser.
 
 ### Manual
@@ -71,11 +73,11 @@ The card reads `bikes_available` and `ebikes_available` from each
 sensor's attributes. Counts of `0` are highlighted in the theme's
 error color. Map view additionally requires `latitude` and
 `longitude` attributes on each sensor, which the
-[ha-mevo](https://github.com/dulek/ha_mevo) integration provides.
+[ha-mevo](https://github.com/dulek/ha-mevo) integration provides.
 
 ## Compatibility
 
-Requires the [ha-mevo](https://github.com/dulek/ha_mevo) integration
+Requires the [ha-mevo](https://github.com/dulek/ha-mevo) integration
 (or any sensor exposing `bikes_available` / `ebikes_available`
 attributes).
 
