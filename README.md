@@ -1,29 +1,21 @@
-# Mevo Card
+# Mevo Card (legacy standalone version)
+
+Starting with [ha-mevo](https://github.com/dulek/ha-mevo) v0.9.3, this card is
+bundled with the integration. Install `ha-mevo` for new setups. This repository
+is kept for existing users of the standalone card.
+
+To migrate, remove this card from the Marketplace or HACS before updating
+`ha-mevo`. Remove any manually configured `/local/mevo-card/card.js` or
+`/hacsfiles/ha-mevo-card/card.js` resource, then restart Home Assistant. Your
+existing `type: custom:mevo-card` dashboard configuration can stay as it is.
 
 Lovelace card for the [ha-mevo](https://github.com/dulek/ha-mevo)
 integration. Displays a compact row of badges with available bikes and
 e-bikes for each Mevo station you monitor.
 
-[![Open this repository in Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dulek&repository=ha-mevo-card&category=plugin)
-
 ![Mevo Card screenshot](screenshot-list.png)
 
 ![Mevo Card screenshot with map](screenshot-map.png)
-
-## Installation
-
-### Marketplace or HACS
-
-1. Open the repository using the badge above. If it is not in the catalog yet,
-   add it as a custom dashboard plugin when prompted.
-2. Install **Mevo Card** in the Marketplace or HACS.
-3. Refresh the browser.
-
-### Manual
-
-1. Download `card.js` and place it in `<config>/www/mevo-card/`.
-2. In **Settings → Dashboards → Resources**, add
-   `/local/mevo-card/card.js` as a JavaScript module.
 
 ## Configuration
 
